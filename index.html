@@ -97,6 +97,24 @@ animation:twinkle var(--t) ease-in-out var(--d) infinite}
 <meta name="twitter:description" content="Você está convidado para celebrar esse momento especial! 12 de dezembro de 2026 • 20h • Buffet La Piccolletta • Rio Claro - SP">
 <meta name="twitter:image" content="https://wederbatera.github.io/convite-tayna-15-anos/tayna-15-anos-whatsapp.jpg">
 
+
+<style>
+#taynaAdminOpen{position:fixed;right:12px;bottom:12px;z-index:100;background:#fffdf4e8;color:#6d4590;border:1px solid #cdb6e0;border-radius:50%;width:37px;height:37px;cursor:pointer;box-shadow:0 2px 10px #0003;font-size:17px}
+#taynaAdmin{display:none;position:fixed;inset:0;z-index:1000;overflow:auto;background:#f6f1fb;color:#342640;font:15px Arial,sans-serif;padding:22px 12px}
+#taynaAdmin.tayna-visible{display:block}
+#taynaAdmin *{box-sizing:border-box}
+.tayna-wrap{max-width:900px;margin:auto}.tayna-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.tayna-head h2{margin:4px 0 16px;color:#653c91}
+.tayna-card{background:#fff;border-radius:16px;padding:18px;margin:12px 0;box-shadow:0 2px 14px #52356715}
+#taynaAdmin input,#taynaAdmin select,#taynaAdmin textarea{font:inherit;padding:10px;border:1px solid #c9b8d6;border-radius:9px;max-width:100%;background:#fff;color:#302438}
+#taynaAdmin button{font:inherit;cursor:pointer;border:0;border-radius:9px;padding:10px 13px;background:#7545a5;color:#fff}
+#taynaAdmin button:disabled{opacity:.5;cursor:wait}
+#taynaAdmin button.tayna-alt{background:#eae0f1;color:#4c3565}
+.tayna-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.tayna-line>label{display:flex;flex-direction:column;gap:5px}.tayna-stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px}
+.tayna-stat div{background:#f2eafa;border-radius:10px;padding:12px}.tayna-stat strong{display:block;font-size:25px;color:#683c97}
+.tayna-table{overflow-x:auto}#taynaAdmin table{width:100%;border-collapse:collapse;min-width:700px}#taynaAdmin th,#taynaAdmin td{text-align:left;padding:9px 7px;border-bottom:1px solid #eee}#taynaAdmin td input[type=number]{width:75px}#taynaAdmin td input[type=text]{width:100%}#taynaAdmin td select{width:130px}
+.tayna-muted{color:#6c6175;font-size:13px}#taynaMessage{min-height:20px;color:#674094}
+@media(max-width:600px){#taynaAdmin{padding:10px 7px}.tayna-card{padding:12px}}
+</style>
 </head>
 <body>
 <main class="app">
@@ -206,6 +224,51 @@ atualizarContagem();
 // Mantém a contagem correta caso a página permaneça aberta durante a virada do dia.
 setInterval(atualizarContagem, 60*60*1000);
 
+</script>
+
+<button id="taynaAdminOpen" type="button" title="Administração da festa" aria-label="Abrir administração">🔒</button>
+<div id="taynaAdmin" role="dialog" aria-modal="true" aria-label="Painel administrativo da Tayná">
+<div class="tayna-wrap">
+ <div class="tayna-head"><h2>💜 Tayná • Administração</h2><button type="button" class="tayna-alt" id="taynaClose">Fechar ✕</button></div>
+ <div id="taynaMessage" role="status" aria-live="polite"></div>
+ <section class="tayna-card" id="taynaLogin">
+  <h3>Acesso restrito</h3><p class="tayna-muted">Entre com seu usuário autorizado no Supabase.</p>
+  <form id="taynaLoginForm" class="tayna-line">
+   <label>E-mail<input id="taynaEmail" type="email" required autocomplete="username" /></label>
+   <label>Senha<input id="taynaPassword" type="password" required autocomplete="current-password" /></label>
+   <button type="submit" id="taynaLoginBtn">Entrar</button>
+  </form>
+ </section>
+ <section id="taynaDashboard" hidden>
+  <div class="tayna-line" style="justify-content:space-between"><span id="taynaUser" class="tayna-muted"></span><button class="tayna-alt" id="taynaLogout" type="button">Sair da conta</button></div>
+  <div class="tayna-card tayna-stat" id="taynaStats"></div>
+  <div class="tayna-card"><div class="tayna-line"><label>Buscar convidado<input id="taynaSearch" type="search" placeholder="Digite um nome ou número"></label><label>Situação<select id="taynaFilter"><option value="Todos">Todos</option><option value="Pendente">Pendente</option><option value="Confirmado">Confirmado</option><option value="Não vai">Não vai</option></select></label><button id="taynaRefresh" type="button" class="tayna-alt">Atualizar lista</button></div><p class="tayna-muted">Edite cada linha e clique em Salvar. Acompanhantes só entram na contagem quando a presença estiver confirmada.</p><div class="tayna-table"><table><thead><tr><th>Nº</th><th>Convidado</th><th>Situação</th><th>Acomp.</th><th>Observações</th><th>Ação</th></tr></thead><tbody id="taynaRows"></tbody></table></div><p class="tayna-muted" id="taynaShown"></p></div>
+ </section>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+(()=>{
+'use strict';
+const URL_SUPABASE='https://jgquttghmtymlugzcliw.supabase.co';
+const CHAVE_PUBLICA='sb_publishable_AtwjPEDsPLPOlfNq3Bqcxw_K30chhmB';
+const $=id=>document.getElementById(id);
+const modal=$('taynaAdmin'),msg=$('taynaMessage');
+let client=null,lista=[];
+const message=t=>{msg.textContent=t||''};
+const estado=x=>x.confirmado===true?'Confirmado':x.confirmado===false?'Não vai':'Pendente';
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function init(){if(!client){if(!window.supabase){message('Não foi possível carregar a conexão. Verifique sua internet.');return false;}client=window.supabase.createClient(URL_SUPABASE,CHAVE_PUBLICA);}return true;}
+function showDash(user){$('taynaLogin').hidden=!!user;$('taynaDashboard').hidden=!user;$('taynaUser').textContent=user?'Conectado: '+user.email:'';}
+async function carregar(){if(!init())return;message('Carregando convidados...');const {data,error}=await client.from('tayna_convidados').select('id,numero,nome,confirmado,acompanhantes,observacoes').order('numero',{ascending:true}).limit(1000);if(error){message('Não foi possível acessar os convidados: '+error.message);return;}lista=data||[];render();message('Lista atualizada.');}
+function render(){let conf=lista.filter(x=>x.confirmado===true),neg=lista.filter(x=>x.confirmado===false),acomp=conf.reduce((n,x)=>n+(Number(x.acompanhantes)||0),0);$('taynaStats').innerHTML=[['Cadastrados',lista.length],['Confirmados',conf.length],['Não vão',neg.length],['Pendentes',lista.length-conf.length-neg.length],['Acompanhantes confirmados',acomp],['Total confirmado',conf.length+acomp]].map(([k,v])=>'<div><span>'+k+'</span><strong>'+v+'</strong></div>').join('');const busca=$('taynaSearch').value.toLocaleLowerCase('pt-BR'),filtro=$('taynaFilter').value;const encontrados=lista.filter(x=>(filtro==='Todos'||estado(x)===filtro)&&((x.nome||'').toLocaleLowerCase('pt-BR').includes(busca)||String(x.numero??'').includes(busca)));$('taynaShown').textContent=encontrados.length+' de '+lista.length+' registros exibidos';$('taynaRows').innerHTML=encontrados.map(x=>'<tr data-id="'+x.id+'"><td>'+esc(x.numero)+'</td><td><input class="tn-nome" type="text" maxlength="200" aria-label="Nome" value="'+esc(x.nome)+'"></td><td><select class="tn-status" aria-label="Situação">'+['Pendente','Confirmado','Não vai'].map(st=>'<option '+(estado(x)===st?'selected':'')+'>'+st+'</option>').join('')+'</select></td><td><input class="tn-acomp" type="number" min="0" max="100" step="1" value="'+(Number(x.acompanhantes)||0)+'" aria-label="Acompanhantes"></td><td><input class="tn-obs" type="text" maxlength="500" value="'+esc(x.observacoes)+'" aria-label="Observações"></td><td><button type="button" class="tn-save">Salvar</button></td></tr>').join('');}
+async function verificar(){if(!init())return;const {data:{user},error}=await client.auth.getUser();if(error||!user){showDash(null);return;}const {data, error:perr}=await client.from('tayna_administradores').select('user_id').eq('user_id',user.id).maybeSingle();if(perr||!data){showDash(null);message('Este usuário não está autorizado para administrar o convite.');await client.auth.signOut();return;}showDash(user);await carregar();}
+$('taynaAdminOpen').addEventListener('click',()=>{modal.classList.add('tayna-visible');document.body.style.overflow='hidden';verificar();});
+$('taynaClose').addEventListener('click',()=>{modal.classList.remove('tayna-visible');document.body.style.overflow='';message('');});
+$('taynaLoginForm').addEventListener('submit',async e=>{e.preventDefault();if(!init())return;const btn=$('taynaLoginBtn');btn.disabled=true;message('Verificando acesso...');try{const {error}=await client.auth.signInWithPassword({email:$('taynaEmail').value.trim(),password:$('taynaPassword').value});if(error){message('Não foi possível entrar: '+error.message);return;}$('taynaPassword').value='';await verificar();}finally{btn.disabled=false;}});
+$('taynaLogout').addEventListener('click',async()=>{if(client)await client.auth.signOut();lista=[];showDash(null);message('Sessão encerrada.');});
+$('taynaRefresh').addEventListener('click',carregar);$('taynaSearch').addEventListener('input',render);$('taynaFilter').addEventListener('change',render);
+$('taynaRows').addEventListener('click',async e=>{const btn=e.target.closest('.tn-save');if(!btn||!client)return;const tr=btn.closest('tr'),id=Number(tr.dataset.id),nome=tr.querySelector('.tn-nome').value.trim(),st=tr.querySelector('.tn-status').value,acomp=Number(tr.querySelector('.tn-acomp').value),observacoes=tr.querySelector('.tn-obs').value.trim();if(!nome){message('O nome não pode ficar vazio.');return;}if(!Number.isInteger(acomp)||acomp<0||acomp>100){message('Informe um número de acompanhantes entre 0 e 100.');return;}btn.disabled=true;message('Salvando...');const confirmado=st==='Pendente'?null:st==='Confirmado';const {error}=await client.from('tayna_convidados').update({nome,confirmado,acompanhantes:acomp,observacoes,atualizado_em:new Date().toISOString()}).eq('id',id);btn.disabled=false;if(error){message('Erro ao salvar: '+error.message);return;}const item=lista.find(x=>x.id===id);if(item)Object.assign(item,{nome,confirmado,acompanhantes:acomp,observacoes});render();message('✓ Alteração salva no Supabase.');});
+})();
 </script>
 </body>
 </html>
